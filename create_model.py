@@ -13,6 +13,7 @@ import numpy as np
 start_time = 415839606029
 end_time = 416311906098
 SEQUENCE_LEN = 2048
+STEP_SIZE = 256
 
 with open("../datasets/hup138.pickle", 'rb') as f: data, fs = pickle.load(f)
 
@@ -28,7 +29,8 @@ for i in range(0, data.shape[0]):
 # training dataset dimensions should be (# samples, 2048, 1)
 train = []
 # training target dataset dimensions should be (# samples)
-# 0 indicates non-seizure, 1 indicates seizure
+# 0 indicates normal activity, 1 indicates seizing
+
 train_targets = []
 
 for column in data:
@@ -37,12 +39,17 @@ for column in data:
     
     col_list = data[column].tolist()
     col_data = labels.loc[labels[0] == column]
-
-    col_start_time = int(col_data.iat[0, 1])
-    col_end_time = int(col_data.iat[0, 2])
     
-    for index in range(SEQUENCE_LEN, data.shape[0], 16):
-        
+    col_start_time = col_data.iat[0, 1]
+    col_end_time = col_data.iat[0, 2]
+    if(col_start_time == '-' or col_end_time == '-'):
+        col_start_time = end_time + 1
+        col_start_time = end_time + 1
+    else:
+        col_start_time = int(col_start_time)
+        col_end_time = int(col_end_time)  
+    
+    for index in range(SEQUENCE_LEN, data.shape[0], STEP_SIZE):
         sequence = col_list[(index - SEQUENCE_LEN):index]
         sequence = [[i] for i in sequence]
         train.append(sequence)
