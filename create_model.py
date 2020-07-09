@@ -17,7 +17,7 @@ STEP_SIZE = 256
 
 with open("../datasets/hup138.pickle", 'rb') as f: data, fs = pickle.load(f)
 
-labels = pd.read_csv("../datasets/hup138-labels.csv", header = None)
+labels = pd.read_csv("../hup138-labels.csv", header = None)
 labels_list = labels[0].tolist()
 data = data[data.columns.intersection(labels_list)]
 
