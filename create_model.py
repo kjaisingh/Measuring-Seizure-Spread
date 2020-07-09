@@ -38,8 +38,9 @@ START_TIME = 415839606029
 END_TIME = 416311906098
 SEQUENCE_LEN = 2048
 STEP_SIZE = 4096
-EPOCHS = 10
-BS = 64
+EPOCHS = 1
+BS = 128
+LR = 0.001
 
 
 # ------------------
@@ -120,17 +121,17 @@ x_test, x_val, y_test, y_val = train_test_split(x_test,
 # ------------------
 model = Sequential()
 model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1)))
-model.add(Dense(1, activation='sigmoid'))
+model.add(Dense(1, activation = 'sigmoid'))
 model.summary()
 
 
 # ------------------
 # TRAIN MODEL
 # ------------------
-adam = Adam(lr=0.001)
+adam = Adam(lr = LR)
 
-chk = ModelCheckpoint('baseline.pkl', 
-                      monitor = 'val_acc', 
+chk = ModelCheckpoint('best_model.pkl', 
+                      monitor = 'val_accuracy', 
                       save_best_only = True, 
                       mode = 'max', 
                       verbose = 1)
@@ -147,8 +148,8 @@ model.fit(x_train, y_train,
 
 
 # ------------------
-# VALIDATE MODEL
+# TEST MODEL
 # ------------------
-model = load_model('baseline.pkl')
+model = load_model('best_model.pkl')
 y_preds = model.predict_classes(x_test)
 acc = accuracy_score(y_test, y_preds)
