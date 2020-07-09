@@ -6,4 +6,4 @@
 
 ### create_model.py
 * Process training data for model and train LSTM model.
-* Under construction.
+* Currently utilizes a baseline model.
