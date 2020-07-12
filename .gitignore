@@ -1,6 +1,8 @@
 build/
 dist/
 MovementAAL/
+.DS_Store
+.pylintrc
 
 .vscode/
 __pycache__/
