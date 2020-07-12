@@ -12,10 +12,12 @@ Created on Wed Jul  1 14:58:18 2020
 import pickle
 import pandas as pd
 import numpy as np
+import math
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils import class_weight
 
 import tensorflow as tf
 from keras.models import Model 
@@ -123,8 +125,20 @@ def create_dataset(data):
                 
     dataset = np.array(dataset)
     dataset_targets = np.array(dataset_targets)
-
+    
     return dataset, dataset_targets
+
+def scale_data(dataset):
+    scaler = StandardScaler()
+    dataset = scaler.fit_transform(dataset.reshape(-1, dataset.shape[-1])).reshape(dataset.shape)
+    return dataset
+
+def create_class_weights(y_train):
+    class_weights = class_weight.compute_class_weight('balanced',
+                                                      classes = np.unique(y_train),
+                                                      y = y_train)
+    class_weight_dict = dict(enumerate(class_weights))
+    return class_weight_dict
 
 
 # ------------------
@@ -132,9 +146,9 @@ def create_dataset(data):
 # ------------------
 def create_lstm_model():
     model = Sequential()
-    model.add(LSTM(32, input_shape = (SEQUENCE_LEN, 1), dropout = 0.4, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1), dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
     model.add(LSTM(32, dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
-    model.add(LSTM(32, dropout = 0.1, recurrent_dropout = 0.1, return_sequences = False))
+    model.add(LSTM(32, return_sequences = False))
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
     return model
@@ -152,7 +166,10 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
                   optimizer = adam, 
                   metrics = ['accuracy'])
     
+    class_weights = create_class_weights(y_train)
+    
     model.fit(x_train, y_train, 
+              class_weight = class_weights,
               epochs = EPOCHS, 
               batch_size = BS, 
               callbacks = [chk], 
@@ -198,7 +215,10 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
                   optimizer= adam, 
                   metrics=['accuracy'])
     
+    class_weights = create_class_weights(y_train)
+
     model.fit(x_train, y_train,
+              class_weight = class_weights,
               batch_size = BS,
               epochs = EPOCHS,
               callbacks = callbacks_list,
@@ -232,6 +252,11 @@ if __name__=="__main__":
     # 0 indicates normal activity, 1 indicates seizing
     dataset, dataset_targets = create_dataset(data)
     
+    """
+    OPTIONAL METHODS FOR PREPROCESSING
+    dataset = scale_data(datset)
+    """
+    
     # split dataset into train, test and validation
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
                                                         dataset_targets, 
@@ -240,25 +265,24 @@ if __name__=="__main__":
                                                     y_test, 
                                                     test_size = 0.5)
     
-    # LSTM
+    # train LSTM
     lstm_model = create_lstm_model()
     lstm_model_name = 'lstm-eeg-model'
     lstm_model = train_lstm_model(lstm_model, lstm_model_name, 
                                   x_train, y_train, x_val, y_val)
     
-    # CNN
+    # test LSTM
+    lstm_acc = model_acc(lstm_model_name)
+    print("LSTM Test Set Accuracy: ")
+    print("%.4f" % round(lstm_acc, 4))
+    
+    # train CNN
     cnn_model = create_lstm_model()
     cnn_model_name = 'cnn-eeg-model'
     cnn_model = train_lstm_model(cnn_model, cnn_model_name, 
                                  x_train, y_train, x_val, y_val)
     
-    # test models
-    lstm_acc = model_acc(lstm_model_name)
-    print("LSTM Test Set Accuracy: ")
-    print("%.4f" % round(lstm_acc, 4))
-    
-    print("\n-------------------------------\n")
-    
+    # test CNN
     cnn_acc = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))
