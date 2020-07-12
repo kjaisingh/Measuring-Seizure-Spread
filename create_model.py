@@ -12,9 +12,17 @@ Created on Wed Jul  1 14:58:18 2020
 import pickle
 import pandas as pd
 import numpy as np
-import tensorflow as tf
+
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+
+import tensorflow as tf
+from keras.models import Model 
+from keras.optimizers import Adam
+from keras.models import load_model
+from keras.callbacks import ModelCheckpoint
+from keras.callbacks import EarlyStopping
 
 
 # ------------------
@@ -24,23 +32,17 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
 
-from keras.optimizers import Adam
-from keras.models import load_model
-from keras.callbacks import ModelCheckpoint
-
 
 # ------------------
 # CNN IMPORTS
 # ------------------
 from keras.optimizers import SGD
-from keras.models import Model 
 from keras.layers import Reshape
 from keras.layers import Conv1D
 from keras.layers import Dropout
 from keras.layers import Flatten
 from keras.layers import MaxPooling1D
 from keras.layers import GlobalAveragePooling1D
-from keras.callbacks import EarlyStopping
 
 
 # ------------------
@@ -85,6 +87,9 @@ def create_timestamps(data):
 # ------------------
 def create_dataset(data):
     
+    dataset = []
+    dataset_targets = []
+    
     labels = pd.read_csv("hup138-labels.csv", header = None)
     for column in data:
         
@@ -115,7 +120,10 @@ def create_dataset(data):
                 dataset_targets.append(1)
             else:
                 dataset_targets.append(0)
-        
+                
+    dataset = np.array(dataset)
+    dataset_targets = np.array(dataset_targets)
+
     return dataset, dataset_targets
 
 
@@ -124,7 +132,9 @@ def create_dataset(data):
 # ------------------
 def create_lstm_model():
     model = Sequential()
-    model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1)))
+    model.add(LSTM(32, input_shape = (SEQUENCE_LEN, 1), dropout = 0.4, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(32, dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(32, dropout = 0.1, recurrent_dropout = 0.1, return_sequences = False))
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
     return model
@@ -159,9 +169,12 @@ def create_cnn_model():
     input_shape = (SEQUENCE_LEN * 1)
     model.add(Reshape((SEQUENCE_LEN, 1), input_shape = (input_shape,)))
     model.add(Conv1D(1000, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
+    model.add(Dropout(0.5))
     model.add(Conv1D(500, 50, activation='relu'))
+    model.add(Dropout(0.4))
     model.add(MaxPooling1D(3))
     model.add(Conv1D(100, 10, activation='relu'))
+    model.add(Dropout(0.2))
     model.add(Conv1D(10, 10, activation='relu'))
     model.add(GlobalAveragePooling1D())
     model.add(Dropout(0.5))
@@ -217,14 +230,9 @@ if __name__=="__main__":
     # dataset dimensions should be (# samples, 2048, 1)
     # target dataset dimensions should be (# samples)
     # 0 indicates normal activity, 1 indicates seizing
-    dataset = []
-    dataset_targets = []
     dataset, dataset_targets = create_dataset(data)
     
     # split dataset into train, test and validation
-    dataset = np.array(dataset)
-    dataset_targets = np.array(dataset_targets)
-    
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
                                                         dataset_targets, 
                                                         test_size = 0.2)
