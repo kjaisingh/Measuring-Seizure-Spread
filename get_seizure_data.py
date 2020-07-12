@@ -10,6 +10,7 @@ from ieeg.auth import Session
 import pandas as pd
 import pickle
 
+
 def get_seizure_data(username, password, iEEG_filename, start_time_usec, stop_time_usec, outputfile):
     print("\n\nGetting data from iEEG.org:")
     print("iEEG_filename: {0}".format(iEEG_filename))
