@@ -12,13 +12,14 @@ Created on Wed Jul  1 14:58:18 2020
 import pickle
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-
-
-# ------------------
-# KERAS IMPORTS
-# ------------------
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+
+# ------------------
+# LSTM IMPORTS
+# ------------------
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
@@ -27,7 +28,19 @@ from keras.optimizers import Adam
 from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
 
-from sklearn.metrics import accuracy_score
+
+# ------------------
+# CNN IMPORTS
+# ------------------
+from keras.optimizers import SGD
+from keras.models import Model 
+from keras.layers import Reshape
+from keras.layers import Conv1D
+from keras.layers import Dropout
+from keras.layers import Flatten
+from keras.layers import MaxPooling1D
+from keras.layers import GlobalAveragePooling1D
+from keras.callbacks import EarlyStopping
 
 
 # ------------------
@@ -42,6 +55,7 @@ BS = 128
 LR = 0.001
 PATH = "../datasets/hup138.pickle"
 FS = 1024
+NUM_CLASSES = 2
 
 
 # ------------------
@@ -64,8 +78,6 @@ def create_timestamps(data):
     for i in range(0, data.shape[0]):
         timestamps.append(START_TIME + (i * FS))
     return timestamps
-    
-
 
 
 # ------------------
@@ -108,27 +120,16 @@ def create_dataset(data):
 
 
 # ------------------
-# CREATE MODELS
+# LSTM MODEL
 # ------------------
 def create_lstm_model():
     model = Sequential()
     model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1)))
     model.add(Dense(1, activation = 'sigmoid'))
-    model.summary()
+    print(model.summary())
     return model
 
-def create_cnn_model():
-    model = Sequential()
-    model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1)))
-    model.add(Dense(1, activation = 'sigmoid'))
-    model.summary()
-    return model
-
-
-# ------------------
-# TRAIN MODELS
-# ------------------
-def train_lstm_model(model, model_name):
+def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
     adam = Adam(lr = LR)
     
     chk = ModelCheckpoint((model_name + '.pkl'), 
@@ -145,6 +146,49 @@ def train_lstm_model(model, model_name):
               epochs = EPOCHS, 
               batch_size = BS, 
               callbacks = [chk], 
+              validation_data = (x_val, y_val))
+    
+    return model
+
+
+# ------------------
+# CNN MODEL
+# ------------------
+def create_cnn_model():
+    model = Sequential()
+    input_shape = (SEQUENCE_LEN * 1)
+    model.add(Reshape((SEQUENCE_LEN, 1), input_shape = (input_shape,)))
+    model.add(Conv1D(1000, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
+    model.add(Conv1D(500, 50, activation='relu'))
+    model.add(MaxPooling1D(3))
+    model.add(Conv1D(100, 10, activation='relu'))
+    model.add(Conv1D(10, 10, activation='relu'))
+    model.add(GlobalAveragePooling1D())
+    model.add(Dropout(0.5))
+    model.add(Dense(1, activation = 'sigmoid'))
+    print(model.summary())
+    return model
+
+def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
+    adam = Adam(lr = LR)
+    chk = ModelCheckpoint((model_name + '.pkl'), 
+                          monitor = 'val_acc', 
+                          save_best_only = True,
+                          mode= 'max',
+                          verbose = 1)
+    callbacks_list = [
+        chk,
+        EarlyStopping(monitor='acc', patience=1)
+    ]
+    
+    model.compile(loss = 'binary_crossentropy',
+                  optimizer= adam, 
+                  metrics=['accuracy'])
+    
+    model.fit(x_train, y_train,
+              batch_size = BS,
+              epochs = EPOCHS,
+              callbacks = callbacks_list,
               validation_data = (x_val, y_val))
     
     return model
@@ -191,15 +235,22 @@ if __name__=="__main__":
     # LSTM
     lstm_model = create_lstm_model()
     lstm_model_name = 'lstm-eeg-model'
-    lstm_model = train_lstm_model(lstm_model, lstm_model_name)
+    lstm_model = train_lstm_model(lstm_model, lstm_model_name, 
+                                  x_train, y_train, x_val, y_val)
     
     # CNN
     cnn_model = create_lstm_model()
     cnn_model_name = 'cnn-eeg-model'
-    cnn_model = train_lstm_model(cnn_model, cnn_model_name)
+    cnn_model = train_lstm_model(cnn_model, cnn_model_name, 
+                                 x_train, y_train, x_val, y_val)
     
     # test models
     lstm_acc = model_acc(lstm_model_name)
+    print("LSTM Test Set Accuracy: ")
+    print("%.4f" % round(lstm_acc, 4))
+    
+    print("\n-------------------------------\n")
+    
     cnn_acc = model_acc(cnn_model_name)
-    print("Final LSTM Accuracy: " + lstm_acc)
-    print("Final CNN Accuracy: " + cnn_acc)
+    print("CNN Test Set Accuracy: ")
+    print("%.4f" % round(cnn_acc, 4))
