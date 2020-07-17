@@ -189,6 +189,7 @@ def create_lstm_model():
     return model
 
 def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
+    adam = Adam(lr = LR)
     sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
     
     chk = ModelCheckpoint((model_name + '.pkl'), 
@@ -198,7 +199,7 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
                           verbose = 1)
     
     model.compile(loss = 'binary_crossentropy', 
-                  optimizer = sgd, 
+                  optimizer = adam, 
                   metrics = ['accuracy'])
     
     class_weights = create_class_weights(y_train)
@@ -231,7 +232,9 @@ def create_cnn_model():
     return model
 
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
+    adam = Adam(lr = LR)
     sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
+    
     chk = ModelCheckpoint((model_name + '.pkl'), 
                           monitor = 'val_acc', 
                           save_best_only = True,
@@ -243,7 +246,7 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
     ]
     
     model.compile(loss = 'binary_crossentropy',
-                  optimizer = sgd, 
+                  optimizer = adam, 
                   metrics = ['accuracy'])
     
     class_weights = create_class_weights(y_train)
@@ -294,8 +297,8 @@ if __name__=="__main__":
     """
     OPTIONALPREPROCESSING METHODS: 
     dataset = scale_data(datset)
-    """
-    # dataset = apply_pca(dataset, SEQUENCE_PCA)
+    dataset = apply_pca(dataset, SEQUENCE_PCA)
+    """ 
     
     # split dataset into train, test and validation
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
