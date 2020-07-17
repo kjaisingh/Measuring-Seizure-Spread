@@ -19,6 +19,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import class_weight
+from sklearn import decomposition
 
 import tensorflow as tf
 from keras.models import Model 
@@ -53,14 +54,20 @@ from keras.layers import GlobalAveragePooling1D
 # ------------------
 START_TIME = 415839606029
 END_TIME = 416311906098
-SEQUENCE_LEN = 2048
+FS = 1024
+
 STEP_SIZE = 4096
+SEQUENCE_LEN = 2048
+SEQUENCE_PCA = 1000
+
 EPOCHS = 1
 BS = 128
 LR = 0.001
-PATH = "../datasets/hup138.pickle"
-FS = 1024
 NUM_CLASSES = 2
+MOMENTUM = 0.1
+DECAY = 1e-6
+
+PATH = "../datasets/hup138.pickle"
 
 
 # ------------------
@@ -111,14 +118,13 @@ def create_timestamps(data):
 # PROCESS DATA
 # ------------------
 def create_dataset(data):
-    
     dataset = []
     dataset_targets = []
     
     labels = pd.read_csv("hup138-labels.csv", header = None)
     for column in data:
         
-        print("Currently on Column: " + column)
+        print("Currently on Electrode: " + column)
         
         col_list = data[column].tolist()
         col_data = labels.loc[labels[0] == column]
@@ -163,6 +169,12 @@ def create_class_weights(y_train):
     class_weight_dict = dict(enumerate(class_weights))
     return class_weight_dict
 
+def apply_pca(dataset, components):
+    pca = decomposition.PCA(n_components = components)
+    pca.fit(components)
+    dataset = pca.transform(dataset)
+    return dataset
+
 
 # ------------------
 # LSTM MODEL
@@ -177,7 +189,7 @@ def create_lstm_model():
     return model
 
 def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
-    adam = Adam(lr = LR)
+    sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
     
     chk = ModelCheckpoint((model_name + '.pkl'), 
                           monitor = 'val_accuracy', 
@@ -186,7 +198,7 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
                           verbose = 1)
     
     model.compile(loss = 'binary_crossentropy', 
-                  optimizer = adam, 
+                  optimizer = sgd, 
                   metrics = ['accuracy'])
     
     class_weights = create_class_weights(y_train)
@@ -206,10 +218,8 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
 # ------------------
 def create_cnn_model():
     model = Sequential()
-    model.add(Conv1D(1000, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
+    model.add(Conv1D(500, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
     model.add(Dropout(0.5))
-    model.add(Conv1D(500, 50, activation='relu'))
-    model.add(Dropout(0.4))
     model.add(MaxPooling1D(3))
     model.add(Conv1D(100, 10, activation='relu'))
     model.add(Dropout(0.2))
@@ -221,7 +231,7 @@ def create_cnn_model():
     return model
 
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
-    adam = Adam(lr = LR)
+    sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
     chk = ModelCheckpoint((model_name + '.pkl'), 
                           monitor = 'val_acc', 
                           save_best_only = True,
@@ -229,12 +239,12 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
                           verbose = 1)
     callbacks_list = [
         chk,
-        EarlyStopping(monitor='acc', patience=1)
+        EarlyStopping(monitor = 'acc', patience = 1)
     ]
     
     model.compile(loss = 'binary_crossentropy',
-                  optimizer= adam, 
-                  metrics=['accuracy'])
+                  optimizer = sgd, 
+                  metrics = ['accuracy'])
     
     class_weights = create_class_weights(y_train)
 
@@ -282,9 +292,10 @@ if __name__=="__main__":
     dataset, dataset_targets = create_dataset(data)
     
     """
-    OPTIONAL METHODS FOR PREPROCESSING
+    OPTIONALPREPROCESSING METHODS: 
     dataset = scale_data(datset)
     """
+    # dataset = apply_pca(dataset, SEQUENCE_PCA)
     
     # split dataset into train, test and validation
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
@@ -315,3 +326,5 @@ if __name__=="__main__":
     cnn_acc = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))
+    
+    
