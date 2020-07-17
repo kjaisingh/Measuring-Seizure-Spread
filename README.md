@@ -17,5 +17,7 @@
 * Dropout
 * Feature Scaling
 * Class Balancing (via Class Weights)
+* IMPLEMENT/TEST: Dimension Reduction (eg. Principal Component Analysis)
 * IMPLMENENT/TEST: GridSearch
+* IMPLEMENT/TEST: Momentum
 * IMPLEMENT/TEST: Incorporating neighbouring electrode data
