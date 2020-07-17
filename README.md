@@ -21,3 +21,4 @@
 * IMPLMENENT/TEST: GridSearch
 * IMPLEMENT/TEST: Momentum
 * IMPLEMENT/TEST: Incorporating neighbouring electrode data
+* IMPLEMENT/TEST: Incorporating both referential + bipolar data
