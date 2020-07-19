@@ -20,6 +20,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import class_weight
 from sklearn import decomposition
+from sklearn.model_selection import GridSearchCV
 
 import tensorflow as tf
 from keras.models import Model 
@@ -27,6 +28,8 @@ from keras.optimizers import Adam
 from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import EarlyStopping
+from keras.wrappers.scikit_learn import KerasClassifier
+
 
 
 # ------------------
@@ -67,6 +70,10 @@ NUM_CLASSES = 2
 MOMENTUM = 0.1
 DECAY = 1e-6
 
+GS_EPOCHS = [1, 2, 3]
+GS_BS = [64, 128, 256]
+GS_OPTIMIZERS = ['adam', 'rmsprop']
+
 PATH = "../datasets/hup138.pickle"
 
 
@@ -85,22 +92,24 @@ def iEEG_data_filter(data, fs, cutoff1, cutoff2, notch):
 	column_names = data.columns
 	data = np.array(data)
 	number_of_channels = data.shape[1]
-	fc = np.array([cutoff1, cutoff2])  # Cut-off frequency of the filter
-	w = fc / np.array([(fs / 2), (fs / 2)])  # Normalize the frequency
+    
+    # Cut-off frequency of the filter
+	fc = np.array([cutoff1, cutoff2])
+    # Normalize the frequency
+	w = fc / np.array([(fs / 2), (fs / 2)])  
+    
 	b, a = signal.butter(4, w, 'bandpass')
 	filtered = np.zeros(data.shape)
 	for i in np.arange(0,number_of_channels):
 		filtered[:,i] = signal.filtfilt(b, a, data[:,i])
-	filtered = filtered + (data[0] - filtered[0])  # correcting offset created by filtfilt
-	# #output2 = output + (signala.mean() - output.mean()   )
-	f0 = notch  # Cut-off notch filter
+	filtered = filtered + (data[0] - filtered[0])
+	f0 = notch
 	q = 30
 	b, a = signal.iirnotch(f0, q, fs)
 	notched = np.zeros(data.shape)
 	for i in np.arange(0, number_of_channels):
 		notched[:, i] = signal.filtfilt(b, a, filtered[:, i])
 	notched_df = pd.DataFrame(notched, columns=column_names)
-	# save file notched_df.to_csv('../data/data/RID0420_208479000000_3600000000_filtered.csv')
 	return notched_df
 
 
@@ -189,6 +198,7 @@ def create_lstm_model():
     return model
 
 def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
+    # options for optimizers
     adam = Adam(lr = LR)
     sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
     
@@ -213,6 +223,15 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
     
     return model
 
+def lstm_gridsearch(optimizer = 'adam'):
+    model = Sequential()
+    model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1), dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(32, dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(32, return_sequences = False))
+    model.add(Dense(1, activation = 'sigmoid'))
+    model.compile(loss = 'binary_crossentropy', optimizer = optimizer, metrics = ['accuracy'])
+    return model    
+
 
 # ------------------
 # CNN MODEL
@@ -232,6 +251,7 @@ def create_cnn_model():
     return model
 
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
+    # options for optimizers
     adam = Adam(lr = LR)
     sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
     
@@ -260,6 +280,20 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
     
     return model
 
+def cnn_gridsearch(optimizer = 'adam'):
+    model = Sequential()
+    model.add(Conv1D(500, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
+    model.add(Dropout(0.5))
+    model.add(MaxPooling1D(3))
+    model.add(Conv1D(100, 10, activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Conv1D(10, 10, activation='relu'))
+    model.add(GlobalAveragePooling1D())
+    model.add(Dropout(0.5))
+    model.add(Dense(1, activation = 'sigmoid'))
+    model.compile(loss = 'binary_crossentropy', optimizer = optimizer, metrics = ['accuracy'])
+    return model
+
 
 # ------------------
 # TEST MODEL
@@ -270,6 +304,32 @@ def model_acc(model_name):
     y_preds = model.predict_classes(x_test)
     acc = accuracy_score(y_test, y_preds)
     return acc
+
+def build_gridsearch(build_function, x_train, y_train, model_name):
+    grid = {'epochs': GS_EPOCHS,
+            'batch_size': GS_BS,
+            'optimizer': GS_OPTIMIZERS}
+    load_model = KerasClassifier(build_fn = build_function)
+    
+    # train using GridSearch 
+    validator = GridSearchCV(load_model,
+                             param_grid = grid,
+                             scoring = 'accuracy',
+                             n_jobs = 1)
+    validator.fit(x_train, y_train)
+    
+    # show results
+    print('Grid Search: ')
+    summary = validator.score_summary()
+    print(summary)
+    
+    # retain best model
+    print('Best Parameters: ')
+    model = validator.best_estimator_.model
+    print(validator.best_params_)
+    model.save(model_name + '.pkl')
+    
+    return model
 
 
 # ------------------
@@ -308,6 +368,9 @@ if __name__=="__main__":
                                                     y_test, 
                                                     test_size = 0.5)
     
+    # --------------------
+    # OPTION 1: Regular
+    # --------------------
     # train LSTM
     lstm_model = create_lstm_model()
     lstm_model_name = 'eeg-model-lstm'
@@ -329,5 +392,26 @@ if __name__=="__main__":
     cnn_acc = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))
+    
+    
+    # --------------------
+    # OPTION 2: GridSearch
+    # --------------------
+    # train and test LSTM
+    gs_lstm_name = 'egg-lstm-gridsearch'
+    gs_lstm = build_gridsearch(lstm_gridsearch, x_train, y_train, gs_lstm_name)
+    gs_lstm_acc = model_acc(gs_lstm_name)
+    print("LSTM Test Set Accuracy: ")
+    print("%.4f" % round(gs_lstm_acc, 4))
+    
+    # train and test CNN
+    gs_cnn_name = 'eeg-cnn-gridsearch'
+    gs_cnn = build_gridsearch(cnn_gridsearch, x_train, y_train, gs_cnn_name)
+    gs_cnn_acc = model_acc(gs_cnn_name)
+    print("CNN Test Set Accuracy: ")
+    print("%.4f" % round(gs_cnn_acc, 4))
+    
+    
+
     
     
