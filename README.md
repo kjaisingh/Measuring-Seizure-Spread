@@ -8,16 +8,3 @@
 * Process training data to create dataset which can be used to train models.
 * Trains and tests a baseline LSTM model.
 * Trains and tests a baseline CNN model.
-
-### Processing + Optimization Techniques
-* Cross-Validation
-* Filtering
-* Downsampling
-* Dropout
-* Feature Scaling
-* Class Balancing (via Class Weights)
-* Stochastic Gradient Descent (with Momentum + Decay)
-* Dimension Reduction (Principal Component Analysis)
-* IMPLMENENT/TEST: GridSearch
-* IMPLEMENT/TEST: Incorporating neighbouring electrode data
-* IMPLEMENT/TEST: Incorporating both referential + bipolar data
