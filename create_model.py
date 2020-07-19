@@ -61,7 +61,7 @@ START_TIME = 415839606029
 END_TIME = 416311906098
 FS = 1024
 
-STEP_SIZE = 4096
+STEP_SIZE = 256
 SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
 
@@ -73,7 +73,7 @@ MOMENTUM = 0.1
 DECAY = 1e-6
 
 GS_EPOCHS = [1, 2, 3]
-GS_BS = [16, 32, 64]
+GS_BS = [32, 64, 128]
 GS_OPTIMIZERS = ['adam', 'rmsprop']
 
 ADAM_DEFAULT = 'adam'
@@ -415,7 +415,6 @@ if __name__=="__main__":
     print("LSTM Test Set Accuracy: ")
     print("%.4f" % round(lstm_acc, 4))
     
-    """
     # train CNN
     cnn_model = create_cnn_model()
     cnn_model_name = 'eeg-model-cnn'
@@ -425,10 +424,7 @@ if __name__=="__main__":
     # test CNN
     cnn_acc = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
-    print("%.4f" % round(cnn_acc, 4))
-    
-    # plot model histories
-    
+    print("%.4f" % round(cnn_acc, 4))    
     
     
     # --------------------
@@ -438,17 +434,14 @@ if __name__=="__main__":
     gs_lstm_name = 'egg-lstm-gridsearch'
     gs_lstm = build_gridsearch(lstm_gridsearch, x_train, y_train, gs_lstm_name)
     gs_lstm_acc = model_acc(gs_lstm_name)
-    print("LSTM Test Set Accuracy: ")
+    print("GridSearch LSTM Test Set Accuracy: ")
     print("%.4f" % round(gs_lstm_acc, 4))
     
     # train and test CNN
     gs_cnn_name = 'eeg-cnn-gridsearch'
     gs_cnn = build_gridsearch(cnn_gridsearch, x_train, y_train, gs_cnn_name)
     gs_cnn_acc = model_acc(gs_cnn_name)
-    print("CNN Test Set Accuracy: ")
+    print("GridSearch CNN Test Set Accuracy: ")
     print("%.4f" % round(gs_cnn_acc, 4))
-    """
-    
-
     
     
