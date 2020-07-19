@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import math
 from scipy import signal
+import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -22,6 +23,7 @@ from sklearn.utils import class_weight
 from sklearn import decomposition
 from sklearn.model_selection import GridSearchCV
 
+import keras
 import tensorflow as tf
 from keras.models import Model 
 from keras.optimizers import Adam
@@ -64,17 +66,34 @@ SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
 
 EPOCHS = 1
-BS = 128
+BS = 32
 LR = 0.001
 NUM_CLASSES = 2
 MOMENTUM = 0.1
 DECAY = 1e-6
 
 GS_EPOCHS = [1, 2, 3]
-GS_BS = [64, 128, 256]
+GS_BS = [16, 32, 64]
 GS_OPTIMIZERS = ['adam', 'rmsprop']
 
+ADAM_DEFAULT = 'adam'
+SGD_DEFAULT = 'sgd'
+ADAM_CUSTOM = Adam(lr = LR)
+SGD_CUSTOM = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
+
 PATH = "../datasets/hup138.pickle"
+
+
+# ------------------
+# LOSS HISTORY
+# ------------------
+class LossHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.history = {'loss':[],'acc':[]}
+
+    def on_batch_end(self, batch, logs={}):
+        self.history['loss'].append(logs.get('loss'))
+        self.history['acc'].append(logs.get('acc'))
 
 
 # ------------------
@@ -197,19 +216,21 @@ def create_lstm_model():
     print(model.summary())
     return model
 
-def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
-    # options for optimizers
-    adam = Adam(lr = LR)
-    sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
-    
+def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):    
     chk = ModelCheckpoint((model_name + '.pkl'), 
                           monitor = 'val_accuracy', 
                           save_best_only = True, 
                           mode = 'max', 
                           verbose = 1)
+    lstm_history = LossHistory()
+    callbacks_list = [
+        chk,
+        lstm_history,
+        EarlyStopping(monitor = 'acc', patience = 1)
+    ]
     
     model.compile(loss = 'binary_crossentropy', 
-                  optimizer = adam, 
+                  optimizer = ADAM_CUSTOM, 
                   metrics = ['accuracy'])
     
     class_weights = create_class_weights(y_train)
@@ -218,9 +239,10 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
               class_weight = class_weights,
               epochs = EPOCHS, 
               batch_size = BS, 
-              callbacks = [chk], 
+              callbacks = callbacks_list, 
               validation_data = (x_val, y_val))
     
+    plot_batch_losses(lstm_history, 'lstm-history')
     return model
 
 def lstm_gridsearch(optimizer = 'adam'):
@@ -251,22 +273,20 @@ def create_cnn_model():
     return model
 
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
-    # options for optimizers
-    adam = Adam(lr = LR)
-    sgd = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
-    
     chk = ModelCheckpoint((model_name + '.pkl'), 
                           monitor = 'val_acc', 
                           save_best_only = True,
-                          mode= 'max',
+                          mode = 'max',
                           verbose = 1)
+    cnn_history = LossHistory()
     callbacks_list = [
         chk,
+        cnn_history,
         EarlyStopping(monitor = 'acc', patience = 1)
     ]
     
     model.compile(loss = 'binary_crossentropy',
-                  optimizer = adam, 
+                  optimizer = ADAM_CUSTOM, 
                   metrics = ['accuracy'])
     
     class_weights = create_class_weights(y_train)
@@ -278,6 +298,7 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
               callbacks = callbacks_list,
               validation_data = (x_val, y_val))
     
+    plot_batch_losses(cnn_history, 'cnn-history')
     return model
 
 def cnn_gridsearch(optimizer = 'adam'):
@@ -304,6 +325,18 @@ def model_acc(model_name):
     y_preds = model.predict_classes(x_test)
     acc = accuracy_score(y_test, y_preds)
     return acc
+
+def plot_batch_losses(history, plot_name):
+    y1 = history.history['loss']
+    y2 = history.history['acc']
+    x1 = np.arange(len(y1))
+    k = len(y1) / len(y2)
+    x2 = np.arange(k, len(y1) + 1, k)
+    fig, ax = plt.subplots()
+    line1, = ax.plot(x1, y1, label = 'loss')
+    line2, = ax.plot(x2, y2, label = 'acc')
+    plt.savefig(plot_name + '.png')
+    plt.show()
 
 def build_gridsearch(build_function, x_train, y_train, model_name):
     grid = {'epochs': GS_EPOCHS,
@@ -382,6 +415,7 @@ if __name__=="__main__":
     print("LSTM Test Set Accuracy: ")
     print("%.4f" % round(lstm_acc, 4))
     
+    """
     # train CNN
     cnn_model = create_cnn_model()
     cnn_model_name = 'eeg-model-cnn'
@@ -392,6 +426,9 @@ if __name__=="__main__":
     cnn_acc = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))
+    
+    # plot model histories
+    
     
     
     # --------------------
@@ -410,7 +447,7 @@ if __name__=="__main__":
     gs_cnn_acc = model_acc(gs_cnn_name)
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(gs_cnn_acc, 4))
-    
+    """
     
 
     
