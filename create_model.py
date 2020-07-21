@@ -24,7 +24,6 @@ from sklearn import decomposition
 from sklearn.model_selection import GridSearchCV
 
 import keras
-import tensorflow as tf
 from keras.models import Model 
 from keras.optimizers import Adam
 from keras.models import load_model
@@ -61,19 +60,19 @@ START_TIME = 415839606029
 END_TIME = 416311906098
 FS = 1024
 
-STEP_SIZE = 256
+STEP_SIZE = 1024
 SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
 
-EPOCHS = 1
-BS = 32
-LR = 0.001
+EPOCHS = 5
+BS = 128
+LR = 0.0001
 NUM_CLASSES = 2
 MOMENTUM = 0.1
 DECAY = 1e-6
 
-GS_EPOCHS = [1, 2, 3]
-GS_BS = [32, 64, 128]
+GS_EPOCHS = [1, 2]
+GS_BS = [32, 64]
 GS_OPTIMIZERS = ['adam', 'rmsprop']
 
 ADAM_DEFAULT = 'adam'
@@ -225,8 +224,7 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
     lstm_history = LossHistory()
     callbacks_list = [
         chk,
-        lstm_history,
-        EarlyStopping(monitor = 'acc', patience = 1)
+        lstm_history
     ]
     
     model.compile(loss = 'binary_crossentropy', 
@@ -242,17 +240,7 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
               callbacks = callbacks_list, 
               validation_data = (x_val, y_val))
     
-    plot_batch_losses(lstm_history, 'lstm-history')
-    return model
-
-def lstm_gridsearch(optimizer = 'adam'):
-    model = Sequential()
-    model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1), dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
-    model.add(LSTM(32, dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
-    model.add(LSTM(32, return_sequences = False))
-    model.add(Dense(1, activation = 'sigmoid'))
-    model.compile(loss = 'binary_crossentropy', optimizer = optimizer, metrics = ['accuracy'])
-    return model    
+    return model, lstm_history
 
 
 # ------------------
@@ -263,6 +251,8 @@ def create_cnn_model():
     model.add(Conv1D(500, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
     model.add(Dropout(0.5))
     model.add(MaxPooling1D(3))
+    model.add(Conv1D(100, 10, activation='relu'))
+    model.add(Dropout(0.2))
     model.add(Conv1D(100, 10, activation='relu'))
     model.add(Dropout(0.2))
     model.add(Conv1D(10, 10, activation='relu'))
@@ -281,8 +271,7 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
     cnn_history = LossHistory()
     callbacks_list = [
         chk,
-        cnn_history,
-        EarlyStopping(monitor = 'acc', patience = 1)
+        cnn_history
     ]
     
     model.compile(loss = 'binary_crossentropy',
@@ -298,8 +287,20 @@ def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
               callbacks = callbacks_list,
               validation_data = (x_val, y_val))
     
-    plot_batch_losses(cnn_history, 'cnn-history')
-    return model
+    return model, cnn_history
+
+
+# ------------------
+# GRID SEARCH
+# ------------------
+def lstm_gridsearch(optimizer = 'adam'):
+    model = Sequential()
+    model.add(LSTM(256, input_shape = (SEQUENCE_LEN, 1), dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(32, dropout = 0.2, recurrent_dropout = 0.2, return_sequences = True))
+    model.add(LSTM(32, return_sequences = False))
+    model.add(Dense(1, activation = 'sigmoid'))
+    model.compile(loss = 'binary_crossentropy', optimizer = optimizer, metrics = ['accuracy'])
+    return model  
 
 def cnn_gridsearch(optimizer = 'adam'):
     model = Sequential()
@@ -313,6 +314,28 @@ def cnn_gridsearch(optimizer = 'adam'):
     model.add(Dropout(0.5))
     model.add(Dense(1, activation = 'sigmoid'))
     model.compile(loss = 'binary_crossentropy', optimizer = optimizer, metrics = ['accuracy'])
+    return model
+
+def build_gridsearch(build_function, x_train, y_train, model_name):
+    grid = {'epochs': GS_EPOCHS,
+            'batch_size': GS_BS,
+            'optimizer': GS_OPTIMIZERS}
+    load_model = KerasClassifier(build_fn = build_function)
+    
+    # train using GridSearch 
+    validator = GridSearchCV(load_model,
+                             param_grid = grid,
+                             scoring = 'accuracy',
+                             n_jobs = 1,
+                             verbose = 10)
+    validator.fit(x_train, y_train)
+    
+    # retain best model
+    print('Best Parameters: ')
+    model = validator.best_estimator_.model
+    print(validator.best_params_)
+    model.save(model_name + '.pkl')
+    
     return model
 
 
@@ -329,40 +352,19 @@ def model_acc(model_name):
 def plot_batch_losses(history, plot_name):
     y1 = history.history['loss']
     y2 = history.history['acc']
+    
+    y3 = []
+    for index, value in enumerate(y1):
+        if value > 20:
+            y3.append(index)
+    for i in reversed(y3):
+        del y1[i]
+    
     x1 = np.arange(len(y1))
-    k = len(y1) / len(y2)
-    x2 = np.arange(k, len(y1) + 1, k)
     fig, ax = plt.subplots()
     line1, = ax.plot(x1, y1, label = 'loss')
-    line2, = ax.plot(x2, y2, label = 'acc')
     plt.savefig(plot_name + '.png')
     plt.show()
-
-def build_gridsearch(build_function, x_train, y_train, model_name):
-    grid = {'epochs': GS_EPOCHS,
-            'batch_size': GS_BS,
-            'optimizer': GS_OPTIMIZERS}
-    load_model = KerasClassifier(build_fn = build_function)
-    
-    # train using GridSearch 
-    validator = GridSearchCV(load_model,
-                             param_grid = grid,
-                             scoring = 'accuracy',
-                             n_jobs = 1)
-    validator.fit(x_train, y_train)
-    
-    # show results
-    print('Grid Search: ')
-    summary = validator.score_summary()
-    print(summary)
-    
-    # retain best model
-    print('Best Parameters: ')
-    model = validator.best_estimator_.model
-    print(validator.best_params_)
-    model.save(model_name + '.pkl')
-    
-    return model
 
 
 # ------------------
@@ -388,8 +390,8 @@ if __name__=="__main__":
     dataset, dataset_targets = create_dataset(data)
     
     """
-    OPTIONALPREPROCESSING METHODS: 
-    dataset = scale_data(datset)
+    OPTIONAL PREPROCESSING METHODS: 
+    dataset = scale_data(dataset)
     dataset = apply_pca(dataset, SEQUENCE_PCA)
     """ 
     
@@ -407,8 +409,9 @@ if __name__=="__main__":
     # train LSTM
     lstm_model = create_lstm_model()
     lstm_model_name = 'eeg-model-lstm'
-    lstm_model = train_lstm_model(lstm_model, lstm_model_name, 
+    lstm_model, lstm_history = train_lstm_model(lstm_model, lstm_model_name, 
                                   x_train, y_train, x_val, y_val)
+    plot_batch_losses(lstm_history, 'lstm-history')
     
     # test LSTM
     lstm_acc = model_acc(lstm_model_name)
@@ -418,8 +421,10 @@ if __name__=="__main__":
     # train CNN
     cnn_model = create_cnn_model()
     cnn_model_name = 'eeg-model-cnn'
-    cnn_model = train_cnn_model(cnn_model, cnn_model_name, 
+    cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
                                  x_train, y_train, x_val, y_val)
+    
+    plot_batch_losses(cnn_history, 'cnn-history')
     
     # test CNN
     cnn_acc = model_acc(cnn_model_name)
