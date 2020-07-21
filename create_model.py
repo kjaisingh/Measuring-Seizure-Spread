@@ -363,6 +363,8 @@ def plot_batch_losses(history, plot_name):
     x1 = np.arange(len(y1))
     fig, ax = plt.subplots()
     line1, = ax.plot(x1, y1, label = 'loss')
+    ax.set_xlabel('Batch')
+    ax.set_ylabel('Loss')
     plt.savefig(plot_name + '.png')
     plt.show()
 
@@ -423,7 +425,6 @@ if __name__=="__main__":
     cnn_model_name = 'eeg-model-cnn'
     cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
                                  x_train, y_train, x_val, y_val)
-    
     plot_batch_losses(cnn_history, 'cnn-history')
     
     # test CNN
