@@ -59,6 +59,7 @@ from keras.layers import GlobalAveragePooling1D
 START_TIME = 415839606029
 END_TIME = 416311906098
 FS = 1024
+DOWN_SAMPLE_FACTOR = 10
 
 STEP_SIZE = 1024
 SEQUENCE_LEN = 2048
@@ -380,9 +381,8 @@ if __name__=="__main__":
 
     # filter and downsample data
     data_filtered = iEEG_data_filter(data, FS, 0.16, 200, 60)
-    down_sample_factor = 10
-    fs_downSample = FS / down_sample_factor
-    data_filtered_tmp = signal.decimate(data_filtered, down_sample_factor, axis=0)
+    fs_downSample = FS / DOWN_SAMPLE_FACTOR
+    data_filtered_tmp = signal.decimate(data_filtered, DOWN_SAMPLE_FACTOR, axis = 0)
     data_filtered = pd.DataFrame(data_filtered_tmp, columns = data_filtered.columns); del data_filtered_tmp
     data = data_filtered
 
