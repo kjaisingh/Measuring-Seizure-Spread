@@ -47,6 +47,7 @@ from keras.layers import LSTM
 from keras.optimizers import SGD
 from keras.layers import Reshape
 from keras.layers import Conv1D
+from keras.layers import InputLayer
 from keras.layers import Dropout
 from keras.layers import Flatten
 from keras.layers import MaxPooling1D
@@ -65,7 +66,7 @@ STEP_SIZE = 1024
 SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
 
-EPOCHS = 5
+EPOCHS = 1
 BS = 128
 LR = 0.0001
 NUM_CLASSES = 2
@@ -247,7 +248,7 @@ def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):
 # ------------------
 # CNN MODEL
 # ------------------
-def create_cnn_model():
+def create_custom_cnn_model():
     model = Sequential()
     model.add(Conv1D(500, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
     model.add(Dropout(0.5))
@@ -263,9 +264,22 @@ def create_cnn_model():
     print(model.summary())
     return model
 
+def create_wavenet_cnn_model():
+    model = Sequential()
+    model.add(Conv1D(1, 100, activation='relu', input_shape = (SEQUENCE_LEN, 1)))
+    for rate in (1, 2, 4, 8) * 2:
+        model.add(Conv1D(filters = 20, kernel_size = 2, padding = 'causal',
+                         activation = 'relu', dilation_rate = rate))
+        model.add(Dropout(0.1))
+    model.add(Conv1D(filters = 10, kernel_size = 1))
+    model.add(GlobalAveragePooling1D())
+    model.add(Dense(1, activation = 'sigmoid'))
+    print(model.summary())
+    return model
+
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
     chk = ModelCheckpoint((model_name + '.pkl'), 
-                          monitor = 'val_acc', 
+                          monitor = 'val_accuracy', 
                           save_best_only = True,
                           mode = 'max',
                           verbose = 1)
@@ -420,8 +434,22 @@ if __name__=="__main__":
     print("LSTM Test Set Accuracy: ")
     print("%.4f" % round(lstm_acc, 4))
     
-    # train CNN
-    cnn_model = create_cnn_model()
+    
+    # train wavenet CNN
+    cnn_model = create_wavenet_cnn_model()
+    cnn_model_name = 'eeg-model-cnn-wavenet'
+    cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
+                                 x_train, y_train, x_val, y_val)
+    plot_batch_losses(cnn_history, 'cnn-wavenet-history')
+    
+    # test wavenet CNN
+    cnn_acc = model_acc(cnn_model_name)
+    print("CNN WaveNet Test Set Accuracy: ")
+    print("%.4f" % round(cnn_acc, 4))    
+    
+    
+    # train custom CNN
+    cnn_model = create_custom_cnn_model()
     cnn_model_name = 'eeg-model-cnn'
     cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
                                  x_train, y_train, x_val, y_val)
@@ -432,10 +460,10 @@ if __name__=="__main__":
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))    
     
-    
     # --------------------
     # OPTION 2: GridSearch
     # --------------------
+    """
     # train and test LSTM
     gs_lstm_name = 'egg-lstm-gridsearch'
     gs_lstm = build_gridsearch(lstm_gridsearch, x_train, y_train, gs_lstm_name)
@@ -449,5 +477,6 @@ if __name__=="__main__":
     gs_cnn_acc = model_acc(gs_cnn_name)
     print("GridSearch CNN Test Set Accuracy: ")
     print("%.4f" % round(gs_cnn_acc, 4))
+    """
     
     
