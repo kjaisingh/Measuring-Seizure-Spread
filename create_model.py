@@ -66,9 +66,9 @@ STEP_SIZE = 1024
 SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
 
-EPOCHS = 1
+EPOCHS = 5
 BS = 128
-LR = 0.0001
+LR = 0.01
 NUM_CLASSES = 2
 MOMENTUM = 0.1
 DECAY = 1e-6
@@ -370,7 +370,7 @@ def plot_batch_losses(history, plot_name):
     
     y3 = []
     for index, value in enumerate(y1):
-        if value > 20:
+        if value > 10:
             y3.append(index)
     for i in reversed(y3):
         del y1[i]
@@ -422,6 +422,18 @@ if __name__=="__main__":
     # --------------------
     # OPTION 1: Regular
     # --------------------
+     # train wavenet CNN
+    cnn_model = create_wavenet_cnn_model()
+    cnn_model_name = 'eeg-model-cnn-wavenet'
+    cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
+                                 x_train, y_train, x_val, y_val)
+    plot_batch_losses(cnn_history, 'cnn-wavenet-history')
+    
+    # test wavenet CNN
+    cnn_acc = model_acc(cnn_model_name)
+    print("CNN WaveNet Test Set Accuracy: ")
+    print("%.4f" % round(cnn_acc, 4))    
+    
     # train LSTM
     lstm_model = create_lstm_model()
     lstm_model_name = 'eeg-model-lstm'
@@ -433,19 +445,6 @@ if __name__=="__main__":
     lstm_acc = model_acc(lstm_model_name)
     print("LSTM Test Set Accuracy: ")
     print("%.4f" % round(lstm_acc, 4))
-    
-    
-    # train wavenet CNN
-    cnn_model = create_wavenet_cnn_model()
-    cnn_model_name = 'eeg-model-cnn-wavenet'
-    cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
-                                 x_train, y_train, x_val, y_val)
-    plot_batch_losses(cnn_history, 'cnn-wavenet-history')
-    
-    # test wavenet CNN
-    cnn_acc = model_acc(cnn_model_name)
-    print("CNN WaveNet Test Set Accuracy: ")
-    print("%.4f" % round(cnn_acc, 4))    
     
     
     # train custom CNN
