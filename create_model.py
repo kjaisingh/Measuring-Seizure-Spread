@@ -16,6 +16,7 @@ import math
 from scipy import signal
 import matplotlib.pyplot as plt
 
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
@@ -65,6 +66,10 @@ DOWN_SAMPLE_FACTOR = 10
 STEP_SIZE = 1024
 SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
+
+TRAIN_SIZE = 0.75
+TEST_SIZE = 0.15
+VAL_SIZE = 0.1
 
 EPOCHS = 5
 BS = 128
@@ -149,11 +154,11 @@ def create_timestamps(data):
 def create_dataset(data):
     dataset = []
     dataset_targets = []
-    
     labels = pd.read_csv("hup138-labels.csv", header = None)
+    
     for column in data:
         
-        print("Currently on Electrode: " + column)
+        print("Reading data for electrode " + column)
         
         col_list = data[column].tolist()
         col_data = labels.loc[labels[0] == column]
@@ -164,20 +169,31 @@ def create_dataset(data):
         if(col_start_time == '-' or col_end_time == '-'):
             col_start_time = int(START_TIME + 1)
             col_end_time = int(START_TIME + 1)
+            print('invalid because - for ' + column)
         else:
             col_start_time = int(col_start_time)
-            col_end_time = int(col_end_time)  
+            col_end_time = int(col_end_time)
+            print('COLUMN LISTING')
+            print(col_start_time)
+            print(col_end_time)
+            
         
         # index indicates the ending row number of the sequence
+        print('SHAPE IS')
+        print(data.shape[0])
+        
         for index in range(SEQUENCE_LEN, data.shape[0], STEP_SIZE):
-            sequence = col_list[(index - SEQUENCE_LEN):index]
+            sequence = col_list[(index - SEQUENCE_LEN) : index]
             sequence = [[i] for i in sequence]
             dataset.append(sequence)
     
-            sequence_end_time = START_TIME + (index * FS)
+            sequence_end_time = START_TIME + (index * FS * 10)
+            print(sequence_end_time)
+            print(index)
             
             if(sequence_end_time >= col_end_time):
                 dataset_targets.append(1)
+                # print('got a 1 in column' + column)
             else:
                 dataset_targets.append(0)
                 
@@ -362,7 +378,8 @@ def model_acc(model_name):
     model = load_model(pickle_name)
     y_preds = model.predict_classes(x_test)
     acc = accuracy_score(y_test, y_preds)
-    return acc
+    cm = confusion_matrix(y_test, y_preds)
+    return acc, cm
 
 def plot_batch_losses(history, plot_name):
     y1 = history.history['loss']
@@ -412,12 +429,28 @@ if __name__=="__main__":
     """ 
     
     # split dataset into train, test and validation
+    """
+    RANDOM SPLITS:
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
                                                         dataset_targets, 
-                                                        test_size = 0.2)
+                                                        test_size = TRAIN_SIZE)
     x_test, x_val, y_test, y_val = train_test_split(x_test, 
                                                     y_test, 
                                                     test_size = 0.5)
+    """
+    rows, cols, depth = dataset.shape
+    num_train = int(TRAIN_SIZE * rows)
+    num_test = int(TEST_SIZE * rows)
+    num_val = int(VAL_SIZE * rows)
+    
+    x_train = dataset[ : num_train, :]
+    x_test = dataset[num_train : num_train + num_test, :]
+    x_val = dataset[num_train + num_test : , :]
+    
+    y_train = dataset_targets[ : num_train]
+    y_test = dataset_targets[num_train : num_train + num_test]
+    y_val = dataset_targets[num_train + num_test : ]
+    
     
     # --------------------
     # OPTION 1: Regular
@@ -430,9 +463,11 @@ if __name__=="__main__":
     plot_batch_losses(cnn_history, 'cnn-wavenet-history')
     
     # test wavenet CNN
-    cnn_acc = model_acc(cnn_model_name)
+    cnn_acc, cnn_cm = model_acc(cnn_model_name)
     print("CNN WaveNet Test Set Accuracy: ")
-    print("%.4f" % round(cnn_acc, 4))    
+    print("%.4f" % round(cnn_acc, 4))   
+    print("CNN WaveNet Test Set Confusion Matrix: ")
+    print(cnn_cm)
     
     # train LSTM
     lstm_model = create_lstm_model()
@@ -442,9 +477,11 @@ if __name__=="__main__":
     plot_batch_losses(lstm_history, 'lstm-history')
     
     # test LSTM
-    lstm_acc = model_acc(lstm_model_name)
+    lstm_acc, lstm_cm = model_acc(lstm_model_name)
     print("LSTM Test Set Accuracy: ")
     print("%.4f" % round(lstm_acc, 4))
+    print("LSTM Test Set Confusion Matrix: ")
+    print(lstm_cm)
     
     
     # train custom CNN
@@ -455,9 +492,11 @@ if __name__=="__main__":
     plot_batch_losses(cnn_history, 'cnn-history')
     
     # test CNN
-    cnn_acc = model_acc(cnn_model_name)
+    cnn_acc, cnn_cm = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
-    print("%.4f" % round(cnn_acc, 4))    
+    print("%.4f" % round(cnn_acc, 4))  
+    print("CNN Test Set Confusion Matrix: ")
+    print(cnn_cm)
     
     # --------------------
     # OPTION 2: GridSearch
