@@ -63,7 +63,7 @@ END_TIME = 416311906098
 FS = 1024
 DOWN_SAMPLE_FACTOR = 10
 
-STEP_SIZE = 1024
+STEP_SIZE = 384
 SEQUENCE_LEN = 2048
 SEQUENCE_PCA = 1000
 
@@ -169,18 +169,10 @@ def create_dataset(data):
         if(col_start_time == '-' or col_end_time == '-'):
             col_start_time = int(START_TIME + 1)
             col_end_time = int(START_TIME + 1)
-            print('invalid because - for ' + column)
         else:
             col_start_time = int(col_start_time)
             col_end_time = int(col_end_time)
-            print('COLUMN LISTING')
-            print(col_start_time)
-            print(col_end_time)
             
-        
-        # index indicates the ending row number of the sequence
-        print('SHAPE IS')
-        print(data.shape[0])
         
         for index in range(SEQUENCE_LEN, data.shape[0], STEP_SIZE):
             sequence = col_list[(index - SEQUENCE_LEN) : index]
@@ -188,12 +180,10 @@ def create_dataset(data):
             dataset.append(sequence)
     
             sequence_end_time = START_TIME + (index * FS * 10)
-            print(sequence_end_time)
-            print(index)
             
-            if(sequence_end_time >= col_end_time):
+            if(sequence_end_time >= col_start_time and 
+               sequence_end_time <= col_end_time):
                 dataset_targets.append(1)
-                # print('got a 1 in column' + column)
             else:
                 dataset_targets.append(0)
                 
