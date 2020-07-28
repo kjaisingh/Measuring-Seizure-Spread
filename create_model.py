@@ -377,7 +377,7 @@ def plot_batch_losses(history, plot_name):
     
     y3 = []
     for index, value in enumerate(y1):
-        if value > 10:
+        if value > 100:
             y3.append(index)
     for i in reversed(y3):
         del y1[i]
