@@ -58,20 +58,21 @@ from keras.layers import GlobalAveragePooling1D
 # ------------------
 # CONSTANTS
 # ------------------
-START_TIME = 415839606029
-END_TIME = 416311906098
+START_TIME_INTERICTAL = 407898590000
+END_TIME_INTERICTAL = 407998350000
+START_TIME_ICTAL = 416039606029
+END_TIME_ICTAL = 416112464960
 FS = 1024
 DOWN_SAMPLE_FACTOR = 10
-
-STEP_SIZE = 384
-SEQUENCE_LEN = 2048
+STEP_SIZE = 256
+SEQUENCE_LEN = 1024
 SEQUENCE_PCA = 1000
 
 TRAIN_SIZE = 0.75
 TEST_SIZE = 0.15
 VAL_SIZE = 0.1
 
-EPOCHS = 5
+EPOCHS = 10
 BS = 128
 LR = 0.01
 NUM_CLASSES = 2
@@ -87,7 +88,8 @@ SGD_DEFAULT = 'sgd'
 ADAM_CUSTOM = Adam(lr = LR)
 SGD_CUSTOM = SGD(lr = LR, momentum = MOMENTUM, decay = DECAY, nesterov = True)
 
-PATH = "../datasets/hup138.pickle"
+PATH_INTERICTAL = "../datasets/hup138-interictal.pickle"
+PATH_ICTAL = "../datasets/hup138-ictal.pickle"
 
 
 # ------------------
@@ -144,14 +146,14 @@ def iEEG_data_filter(data, fs, cutoff1, cutoff2, notch):
 def create_timestamps(data):
     timestamps = []
     for i in range(0, data.shape[0]):
-        timestamps.append(START_TIME + (i * FS))
+        timestamps.append(START_TIME_ICTAL + (i * FS))
     return timestamps
 
 
 # ------------------
 # PROCESS DATA
 # ------------------
-def create_dataset(data):
+def create_dataset(data, start_time, end_time):
     dataset = []
     dataset_targets = []
     labels = pd.read_csv("hup138-labels.csv", header = None)
@@ -167,11 +169,12 @@ def create_dataset(data):
         col_end_time = col_data.iat[0, 2]
         
         if(col_start_time == '-' or col_end_time == '-'):
-            col_start_time = int(START_TIME + 1)
-            col_end_time = int(START_TIME + 1)
+            col_start_time = int(start_time + 1)
+            col_end_time = int(start_time + 1)
         else:
             col_start_time = int(col_start_time)
             col_end_time = int(col_end_time)
+            
             
         
         for index in range(SEQUENCE_LEN, data.shape[0], STEP_SIZE):
@@ -179,7 +182,7 @@ def create_dataset(data):
             sequence = [[i] for i in sequence]
             dataset.append(sequence)
     
-            sequence_end_time = START_TIME + (index * FS * 10)
+            sequence_end_time = start_time + (index * FS * 10)
             
             if(sequence_end_time >= col_start_time and 
                sequence_end_time <= col_end_time):
@@ -396,8 +399,11 @@ def plot_batch_losses(history, plot_name):
 # ------------------
 if __name__=="__main__":
     
-    # get and create dataset
-    data = get_data(PATH)
+    # --------------------
+    # INTERICTAL
+    # --------------------
+    # get and create dataset 
+    data = get_data(PATH_INTERICTAL)
     timestamps = create_timestamps(data)
 
     # filter and downsample data
@@ -410,23 +416,53 @@ if __name__=="__main__":
     # dataset dimensions should be (# samples, 2048, 1)
     # target dataset dimensions should be (# samples)
     # 0 indicates normal activity, 1 indicates seizing
-    dataset, dataset_targets = create_dataset(data)
+    dataset_interictal, dataset_targets_interictal = create_dataset(data, START_TIME_INTERICTAL, END_TIME_INTERICTAL)
     
+    # --------------------
+    # ICTAL
+    # --------------------
+    # get and create dataset
+    data = get_data(PATH_ICTAL)
+    timestamps = create_timestamps(data)
+
+    # filter and downsample data
+    data_filtered = iEEG_data_filter(data, FS, 0.16, 200, 60)
+    fs_downSample = FS / DOWN_SAMPLE_FACTOR
+    data_filtered_tmp = signal.decimate(data_filtered, DOWN_SAMPLE_FACTOR, axis = 0)
+    data_filtered = pd.DataFrame(data_filtered_tmp, columns = data_filtered.columns); del data_filtered_tmp
+    data = data_filtered
+
+    # dataset dimensions should be (# samples, 2048, 1)
+    # target dataset dimensions should be (# samples)
+    # 0 indicates normal activity, 1 indicates seizing
+    dataset_ictal, dataset_targets_ictal = create_dataset(data, START_TIME_ICTAL, END_TIME_ICTAL)
+    
+    # --------------------
+    # INTERICTAL + ICTAL
+    # --------------------
+    dataset = np.concatenate((dataset_interictal, dataset_ictal))
+    dataset_targets = np.concatenate((dataset_targets_interictal, dataset_targets_ictal))
+    
+    
+    # --------------------
+    # DATASET PROCESSING
+    # --------------------
     """
     OPTIONAL PREPROCESSING METHODS: 
     dataset = scale_data(dataset)
     dataset = apply_pca(dataset, SEQUENCE_PCA)
     """ 
     
-    # split dataset into train, test and validation
-    """
-    RANDOM SPLITS:
+    # random split:
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
                                                         dataset_targets, 
-                                                        test_size = TRAIN_SIZE)
+                                                        test_size = 0.2)
     x_test, x_val, y_test, y_val = train_test_split(x_test, 
                                                     y_test, 
                                                     test_size = 0.5)
+    
+    
+    # per-electrode split:
     """
     rows, cols, depth = dataset.shape
     num_train = int(TRAIN_SIZE * rows)
@@ -440,12 +476,12 @@ if __name__=="__main__":
     y_train = dataset_targets[ : num_train]
     y_test = dataset_targets[num_train : num_train + num_test]
     y_val = dataset_targets[num_train + num_test : ]
-    
+    """
     
     # --------------------
     # OPTION 1: Regular
     # --------------------
-     # train wavenet CNN
+    # train wavenet CNN
     cnn_model = create_wavenet_cnn_model()
     cnn_model_name = 'eeg-model-cnn-wavenet'
     cnn_model, cnn_history = train_cnn_model(cnn_model, cnn_model_name, 
