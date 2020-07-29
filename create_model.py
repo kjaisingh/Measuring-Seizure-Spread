@@ -68,8 +68,8 @@ STEP_SIZE = 256
 SEQUENCE_LEN = 1024
 SEQUENCE_PCA = 1000
 
-TRAIN_SIZE = 0.75
-TEST_SIZE = 0.15
+TRAIN_SIZE = 0.8
+TEST_SIZE = 0.1
 VAL_SIZE = 0.1
 
 EPOCHS = 10
@@ -454,16 +454,24 @@ if __name__=="__main__":
     """ 
     
     # random split:
+    """
     x_train, x_test, y_train, y_test = train_test_split(dataset, 
                                                         dataset_targets, 
                                                         test_size = 0.2)
     x_test, x_val, y_test, y_val = train_test_split(x_test, 
                                                     y_test, 
                                                     test_size = 0.5)
-    
+    print("Number of seizing instances in training set: " + 
+          str(np.count_nonzero(y_train == 1)))
+    print("Number of non-seizing instances in training set: " + 
+          str(np.count_nonzero(y_train == 0)))
+    print("Number of seizing instances in testing set: " + 
+          str(np.count_nonzero(y_test == 1)))
+    print("Number of non-seizing instances in testing set: " + 
+          str(np.count_nonzero(y_test == 0)))
+    """
     
     # per-electrode split:
-    """
     rows, cols, depth = dataset.shape
     num_train = int(TRAIN_SIZE * rows)
     num_test = int(TEST_SIZE * rows)
@@ -476,7 +484,15 @@ if __name__=="__main__":
     y_train = dataset_targets[ : num_train]
     y_test = dataset_targets[num_train : num_train + num_test]
     y_val = dataset_targets[num_train + num_test : ]
-    """
+    print("Number of seizing instances in training set: " + 
+          str(np.count_nonzero(y_train == 1)))
+    print("Number of non-seizing instances in training set: " + 
+          str(np.count_nonzero(y_train == 0)))
+    print("Number of seizing instances in testing set: " + 
+          str(np.count_nonzero(y_test == 1)))
+    print("Number of non-seizing instances in testing set: " + 
+          str(np.count_nonzero(y_test == 0)))
+    
     
     # --------------------
     # OPTION 1: Regular
