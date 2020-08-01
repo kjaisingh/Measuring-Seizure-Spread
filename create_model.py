@@ -17,6 +17,7 @@ from scipy import signal
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
@@ -153,6 +154,63 @@ def create_timestamps(data):
 # ------------------
 # PROCESS DATA
 # ------------------
+def create_merge_dataset(data, split_point, start_time_interictal, 
+                         end_time_interictal, start_time_ictal, end_time_ictal):
+    dataset = []
+    dataset_targets = []
+    labels = pd.read_csv("hup138-labels.csv", header = None)
+    
+    for column in data:
+        
+        print("Reading data for electrode " + column)
+        
+        col_list = data[column].tolist()
+        col_data = labels.loc[labels[0] == column]
+        
+        col_start_time = col_data.iat[0, 1]
+        col_end_time = col_data.iat[0, 2]
+        
+        if(col_start_time == '-' or col_end_time == '-'):
+            col_start_time = int(start_time_ictal + 1)
+            col_end_time = int(start_time_ictal + 1)
+        else:
+            col_start_time = int(col_start_time)
+            col_end_time = int(col_end_time)
+            
+        # first process interictal data
+        for index in range(SEQUENCE_LEN, split_point, STEP_SIZE):
+            sequence = col_list[(index - SEQUENCE_LEN) : index]
+            sequence = [[i] for i in sequence]
+            dataset.append(sequence)
+    
+            sequence_end_time = start_time_interictal + (index * FS * 10)
+            
+            if(sequence_end_time >= col_start_time and 
+               sequence_end_time <= col_end_time):
+                dataset_targets.append(1)
+            else:
+                dataset_targets.append(0)
+        
+        # then process ictal data
+        for index in range(SEQUENCE_LEN, data.shape[0] - split_point, STEP_SIZE):
+            new_index = index + split_point
+            sequence = col_list[(new_index - SEQUENCE_LEN) : new_index]
+            sequence = [[i] for i in sequence]
+            dataset.append(sequence)
+    
+            sequence_end_time = start_time_ictal + (index * FS * 10)
+            
+            if(sequence_end_time >= col_start_time and 
+               sequence_end_time <= col_end_time):
+                dataset_targets.append(1)
+            else:
+                dataset_targets.append(0)
+                
+    dataset = np.array(dataset)
+    dataset_targets = np.array(dataset_targets)
+    
+    return dataset, dataset_targets
+
 def create_dataset(data, start_time, end_time):
     dataset = []
     dataset_targets = []
@@ -372,7 +430,8 @@ def model_acc(model_name):
     y_preds = model.predict_classes(x_test)
     acc = accuracy_score(y_test, y_preds)
     cm = confusion_matrix(y_test, y_preds)
-    return acc, cm
+    scores = precision_recall_fscore_support(y_test, y_preds, average='macro')
+    return acc, cm, scores
 
 def plot_batch_losses(history, plot_name):
     y1 = history.history['loss']
@@ -398,11 +457,10 @@ def plot_batch_losses(history, plot_name):
 # MAIN METHOD
 # ------------------
 if __name__=="__main__":
-    
+        
     # --------------------
-    # INTERICTAL
+    # DATA WRANGLING
     # --------------------
-    # get and create dataset 
     data = get_data(PATH_INTERICTAL)
     timestamps = create_timestamps(data)
 
@@ -411,17 +469,8 @@ if __name__=="__main__":
     fs_downSample = FS / DOWN_SAMPLE_FACTOR
     data_filtered_tmp = signal.decimate(data_filtered, DOWN_SAMPLE_FACTOR, axis = 0)
     data_filtered = pd.DataFrame(data_filtered_tmp, columns = data_filtered.columns); del data_filtered_tmp
-    data = data_filtered
-
-    # dataset dimensions should be (# samples, 2048, 1)
-    # target dataset dimensions should be (# samples)
-    # 0 indicates normal activity, 1 indicates seizing
-    dataset_interictal, dataset_targets_interictal = create_dataset(data, START_TIME_INTERICTAL, END_TIME_INTERICTAL)
+    data_interictal = data_filtered
     
-    # --------------------
-    # ICTAL
-    # --------------------
-    # get and create dataset
     data = get_data(PATH_ICTAL)
     timestamps = create_timestamps(data)
 
@@ -430,25 +479,19 @@ if __name__=="__main__":
     fs_downSample = FS / DOWN_SAMPLE_FACTOR
     data_filtered_tmp = signal.decimate(data_filtered, DOWN_SAMPLE_FACTOR, axis = 0)
     data_filtered = pd.DataFrame(data_filtered_tmp, columns = data_filtered.columns); del data_filtered_tmp
-    data = data_filtered
-
-    # dataset dimensions should be (# samples, 2048, 1)
-    # target dataset dimensions should be (# samples)
-    # 0 indicates normal activity, 1 indicates seizing
-    dataset_ictal, dataset_targets_ictal = create_dataset(data, START_TIME_ICTAL, END_TIME_ICTAL)
+    data_ictal = data_filtered
     
-    # --------------------
-    # INTERICTAL + ICTAL
-    # --------------------
-    dataset = np.concatenate((dataset_interictal, dataset_ictal))
-    dataset_targets = np.concatenate((dataset_targets_interictal, dataset_targets_ictal))
+    data = pd.concat([data_interictal, data_ictal], ignore_index = True)
     
+    dataset, dataset_targets = create_merge_dataset(data, data_interictal.shape[0],
+                                              START_TIME_INTERICTAL, END_TIME_INTERICTAL,
+                                              START_TIME_ICTAL, END_TIME_ICTAL)
     
     # --------------------
     # DATASET PROCESSING
     # --------------------
-    """
-    OPTIONAL PREPROCESSING METHODS: 
+    # optional preprocessing methods
+    """ 
     dataset = scale_data(dataset)
     dataset = apply_pca(dataset, SEQUENCE_PCA)
     """ 
@@ -495,7 +538,7 @@ if __name__=="__main__":
     
     
     # --------------------
-    # OPTION 1: Regular
+    # OPTION 1: Models
     # --------------------
     # train wavenet CNN
     cnn_model = create_wavenet_cnn_model()
@@ -505,7 +548,7 @@ if __name__=="__main__":
     plot_batch_losses(cnn_history, 'cnn-wavenet-history')
     
     # test wavenet CNN
-    cnn_acc, cnn_cm = model_acc(cnn_model_name)
+    cnn_acc, cnn_cm, cnn_scores = model_acc(cnn_model_name)
     print("CNN WaveNet Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))   
     print("CNN WaveNet Test Set Confusion Matrix: ")
@@ -519,7 +562,7 @@ if __name__=="__main__":
     plot_batch_losses(lstm_history, 'lstm-history')
     
     # test LSTM
-    lstm_acc, lstm_cm = model_acc(lstm_model_name)
+    lstm_acc, lstm_cm, lstm_scores = model_acc(lstm_model_name)
     print("LSTM Test Set Accuracy: ")
     print("%.4f" % round(lstm_acc, 4))
     print("LSTM Test Set Confusion Matrix: ")
@@ -534,7 +577,7 @@ if __name__=="__main__":
     plot_batch_losses(cnn_history, 'cnn-history')
     
     # test CNN
-    cnn_acc, cnn_cm = model_acc(cnn_model_name)
+    cnn_acc, cnn_cm, cnn_scores = model_acc(cnn_model_name)
     print("CNN Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))  
     print("CNN Test Set Confusion Matrix: ")
