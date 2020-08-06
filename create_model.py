@@ -26,6 +26,7 @@ from sklearn import decomposition
 from sklearn.model_selection import GridSearchCV
 
 import keras
+from keras.utils.vis_utils import plot_model
 from keras.models import Model 
 from keras.optimizers import Adam
 from keras.models import load_model
@@ -282,6 +283,8 @@ def create_lstm_model():
     model.add(LSTM(32, return_sequences = False))
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
+    plot_model(model, to_file = 'lstm_diagram.png', 
+               show_shapes = True, show_layer_names = True)
     return model
 
 def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):    
@@ -329,6 +332,8 @@ def create_custom_cnn_model():
     model.add(Dropout(0.5))
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
+    plot_model(model, to_file = 'cnn_custom_diagram.png', 
+               show_shapes = True, show_layer_names = True)
     return model
 
 def create_wavenet_cnn_model():
@@ -342,6 +347,8 @@ def create_wavenet_cnn_model():
     model.add(GlobalAveragePooling1D())
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
+    plot_model(model, to_file = 'cnn_wavenet_diagram.png', 
+               show_shapes = True, show_layer_names = True)
     return model
 
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
