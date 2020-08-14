@@ -8,3 +8,7 @@
 * Process training data to create dataset which can be used to train models.
 * Trains and tests a baseline LSTM model.
 * Trains and tests a baseline CNN model.
+
+### File: create_predictions.py
+* Requires dataset to be downloaded from iEEG and labels csv file to be created.
+* Predicts the state of EEG sequences as 0 or 1, and outputs summaries of the model's overall accuracy.
