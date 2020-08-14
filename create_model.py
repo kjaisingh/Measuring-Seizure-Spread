@@ -35,7 +35,6 @@ from keras.callbacks import EarlyStopping
 from keras.wrappers.scikit_learn import KerasClassifier
 
 
-
 # ------------------
 # LSTM IMPORTS
 # ------------------
@@ -216,18 +215,18 @@ def scale_data(dataset):
     dataset = scaler.fit_transform(dataset.reshape(-1, dataset.shape[-1])).reshape(dataset.shape)
     return dataset
 
+def apply_pca(dataset, components):
+    pca = decomposition.PCA(n_components = components)
+    pca.fit(components)
+    dataset = pca.transform(dataset)
+    return dataset
+
 def create_class_weights(y_train):
     class_weights = class_weight.compute_class_weight('balanced',
                                                       classes = np.unique(y_train),
                                                       y = y_train)
     class_weight_dict = dict(enumerate(class_weights))
     return class_weight_dict
-
-def apply_pca(dataset, components):
-    pca = decomposition.PCA(n_components = components)
-    pca.fit(components)
-    dataset = pca.transform(dataset)
-    return dataset
 
 
 # ------------------
@@ -386,17 +385,8 @@ def build_gridsearch(build_function, x_train, y_train, model_name):
 
 
 # ------------------
-# TEST MODEL
+# EVALUATE MODEL
 # ------------------
-def model_acc(model_name):
-    pickle_name = 'models/' + model_name + '.pkl'
-    model = load_model(pickle_name)
-    y_preds = model.predict_classes(x_test)
-    acc = accuracy_score(y_test, y_preds)
-    cm = confusion_matrix(y_test, y_preds)
-    scores = precision_recall_fscore_support(y_test, y_preds, average = 'macro')
-    return acc, cm, scores
-
 def plot_batch_losses(history, plot_name):
     y1 = history.history['loss']
     y2 = history.history['acc']
@@ -415,6 +405,15 @@ def plot_batch_losses(history, plot_name):
     ax.set_ylabel('Loss')
     plt.savefig('figures/' + plot_name + '.png')
     plt.show()
+    
+def model_acc(model_name):
+    pickle_name = 'models/' + model_name + '.pkl'
+    model = load_model(pickle_name)
+    y_preds = model.predict_classes(x_test)
+    acc = accuracy_score(y_test, y_preds)
+    cm = confusion_matrix(y_test, y_preds)
+    scores = precision_recall_fscore_support(y_test, y_preds, average = 'macro')
+    return acc, cm, scores
 
 
 # ------------------

@@ -15,6 +15,55 @@ RUNNING THIS FILE FOR DATASET WITH IDENTIFICATION NUMBER 'ID':
 3. 
 
 """
+# ------------------
+# REGULAR IMPORTS
+# ------------------
+import pickle
+import pandas as pd
+import numpy as np
+import math
+from scipy import signal
+import matplotlib.pyplot as plt
+
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils import class_weight
+from sklearn import decomposition
+from sklearn.model_selection import GridSearchCV
+
+import keras
+from keras.utils.vis_utils import plot_model
+from keras.models import Model 
+from keras.optimizers import Adam
+from keras.models import load_model
+from keras.callbacks import ModelCheckpoint
+from keras.callbacks import EarlyStopping
+from keras.wrappers.scikit_learn import KerasClassifier
+
+
+# ------------------
+# LSTM IMPORTS
+# ------------------
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+
+
+# ------------------
+# CNN IMPORTS
+# ------------------
+from keras.optimizers import SGD
+from keras.layers import Reshape
+from keras.layers import Conv1D
+from keras.layers import InputLayer
+from keras.layers import Dropout
+from keras.layers import Flatten
+from keras.layers import MaxPooling1D
+from keras.layers import GlobalAveragePooling1D
+
 
 # ------------------
 # CONSTANTS
@@ -30,7 +79,8 @@ SEQUENCE_LEN = 1024
 
 PATH_INTERICTAL = "../datasets/hup172-interictal.pickle"
 PATH_ICTAL = "../datasets/hup172-ictal.pickle"
-LABELS = "labels/hup172-labels.csv"
+PATH_LABELS = "labels/hup172-labels.csv"
+PATH_MODEL = 'models/eeg-model-cnn-wavenet'
 
 
 # ------------------
@@ -38,7 +88,7 @@ LABELS = "labels/hup172-labels.csv"
 # ------------------
 def get_data(path):
     with open(path, 'rb') as f: data, fs = pickle.load(f)
-    labels = pd.read_csv("labels/hup138-labels.csv", header = None)
+    labels = pd.read_csv(PATH_LABELS, header = None)
     labels_list = labels[0].tolist()
     data = data[data.columns.intersection(labels_list)]
     return data
@@ -81,11 +131,69 @@ def create_timestamps(data):
 # ------------------
 # PROCESS DATA
 # ------------------
+def create_merge_dataset(data, split_point, start_time_interictal, 
+                         end_time_interictal, start_time_ictal, end_time_ictal):
+    dataset = []
+    dataset_targets = []
+    labels = pd.read_csv(PATH_LABELS, header = None)
+    
+    for column in data:
+        
+        print("Reading data for electrode " + column)
+        
+        col_list = data[column].tolist()
+        col_data = labels.loc[labels[0] == column]
+        
+        col_start_time = col_data.iat[0, 1]
+        col_end_time = col_data.iat[0, 2]
+                
+        if(col_start_time == '-' or col_end_time == '-'):
+            col_start_time = int(start_time_ictal + 1)
+            col_end_time = int(start_time_ictal + 1)
+        else:
+            col_start_time = int(col_start_time)
+            col_end_time = int(col_end_time)
+            
+        # first process interictal data
+        for index in range(SEQUENCE_LEN, split_point, STEP_SIZE):
+            sequence = col_list[(index - SEQUENCE_LEN) : index]
+            sequence = [[i] for i in sequence]
+            dataset.append(sequence)
+    
+            sequence_end_time = start_time_interictal + (index * FS * DOWN_SAMPLE_FACTOR)
+            
+            if(sequence_end_time >= col_start_time and 
+               sequence_end_time <= col_end_time):
+                dataset_targets.append(1)
+            else:
+                dataset_targets.append(0)
+        
+        # then process ictal data
+        for index in range(SEQUENCE_LEN, data.shape[0] - split_point, STEP_SIZE):
+            new_index = index + split_point
+            sequence = col_list[(new_index - SEQUENCE_LEN) : new_index]
+            sequence = [[i] for i in sequence]
+            dataset.append(sequence)
+    
+            sequence_end_time = start_time_ictal + (index * FS * DOWN_SAMPLE_FACTOR)
+            
+            # print(sequence_end_time, col_start_time)
+            if(sequence_end_time >= col_start_time and 
+               sequence_end_time <= col_end_time):
+                dataset_targets.append(1)
+            else:
+                dataset_targets.append(0)
+                
+    dataset = np.array(dataset)
+    dataset_targets = np.array(dataset_targets)
+    
+    return dataset, dataset_targets
+
 # DEPRECATED: only for single, continous start and end time
 def create_dataset(data, start_time, end_time):
     dataset = []
     dataset_targets = []
-    labels = pd.read_csv("labels/hup138-labels.csv", header = None)
+    labels = pd.read_csv(PATH_LABELS, header = None)
     
     for column in data:
         
@@ -124,6 +232,31 @@ def create_dataset(data, start_time, end_time):
     
     return dataset, dataset_targets
 
+
+# ------------------
+# TEST MODEL
+# ------------------
+def model_acc(model_name, test, targets):
+    pickle_name = model_name + '.pkl'
+    model = load_model(pickle_name)
+    preds = model.predict_classes(test)
+    acc = accuracy_score(targets, preds)
+    cm = confusion_matrix(targets, preds)
+    scores = precision_recall_fscore_support(targets, preds, average = 'macro')
+    
+    print("Number of seizing instances in targets: " + 
+          str(np.count_nonzero(targets == 1)))
+    print("Number of non-seizing instances in targets: " + 
+          str(np.count_nonzero(targets == 0)))
+    
+    print("Number of seizing instances in predictions: " + 
+          str(np.count_nonzero(preds == 1)))
+    print("Number of non-seizing instances in predictions: " + 
+          str(np.count_nonzero(preds == 0)))
+    
+    return acc, cm, scores
+
+
 # ------------------
 # MAIN METHOD
 # ------------------
@@ -155,4 +288,13 @@ if __name__=="__main__":
     dataset, dataset_targets = create_merge_dataset(data, data_interictal.shape[0],
                                               START_TIME_INTERICTAL, END_TIME_INTERICTAL,
                                               START_TIME_ICTAL, END_TIME_ICTAL)
+    
+    # --------------------
+    # TESTING MODEL
+    # --------------------
+    cnn_acc, cnn_cm, cnn_scores = model_acc(PATH_MODEL, dataset, dataset_targets)
+    print("CNN WaveNet Test Set Accuracy: ")
+    print("%.4f" % round(cnn_acc, 4))   
+    print("CNN WaveNet Test Set Confusion Matrix: ")
+    print(cnn_cm)
     
