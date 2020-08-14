@@ -74,7 +74,7 @@ TRAIN_SIZE = 0.8
 TEST_SIZE = 0.1
 VAL_SIZE = 0.1
 
-EPOCHS = 10
+EPOCHS = 5
 BS = 128
 LR = 0.01
 NUM_CLASSES = 2
@@ -111,8 +111,7 @@ class LossHistory(keras.callbacks.Callback):
 # ------------------
 def get_data(path):
     with open(path, 'rb') as f: data, fs = pickle.load(f)
-    
-    labels = pd.read_csv("hup138-labels.csv", header = None)
+    labels = pd.read_csv("labels/hup138-labels.csv", header = None)
     labels_list = labels[0].tolist()
     data = data[data.columns.intersection(labels_list)]
     return data
@@ -159,7 +158,7 @@ def create_merge_dataset(data, split_point, start_time_interictal,
                          end_time_interictal, start_time_ictal, end_time_ictal):
     dataset = []
     dataset_targets = []
-    labels = pd.read_csv("hup138-labels.csv", header = None)
+    labels = pd.read_csv("labels/hup138-labels.csv", header = None)
     
     for column in data:
         
@@ -212,48 +211,6 @@ def create_merge_dataset(data, split_point, start_time_interictal,
     
     return dataset, dataset_targets
 
-def create_dataset(data, start_time, end_time):
-    dataset = []
-    dataset_targets = []
-    labels = pd.read_csv("hup138-labels.csv", header = None)
-    
-    for column in data:
-        
-        print("Reading data for electrode " + column)
-        
-        col_list = data[column].tolist()
-        col_data = labels.loc[labels[0] == column]
-        
-        col_start_time = col_data.iat[0, 1]
-        col_end_time = col_data.iat[0, 2]
-        
-        if(col_start_time == '-' or col_end_time == '-'):
-            col_start_time = int(start_time + 1)
-            col_end_time = int(start_time + 1)
-        else:
-            col_start_time = int(col_start_time)
-            col_end_time = int(col_end_time)
-            
-            
-        
-        for index in range(SEQUENCE_LEN, data.shape[0], STEP_SIZE):
-            sequence = col_list[(index - SEQUENCE_LEN) : index]
-            sequence = [[i] for i in sequence]
-            dataset.append(sequence)
-    
-            sequence_end_time = start_time + (index * FS * 10)
-            
-            if(sequence_end_time >= col_start_time and 
-               sequence_end_time <= col_end_time):
-                dataset_targets.append(1)
-            else:
-                dataset_targets.append(0)
-                
-    dataset = np.array(dataset)
-    dataset_targets = np.array(dataset_targets)
-    
-    return dataset, dataset_targets
-
 def scale_data(dataset):
     scaler = StandardScaler()
     dataset = scaler.fit_transform(dataset.reshape(-1, dataset.shape[-1])).reshape(dataset.shape)
@@ -283,12 +240,12 @@ def create_lstm_model():
     model.add(LSTM(32, return_sequences = False))
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
-    plot_model(model, to_file = 'lstm_diagram.png', 
+    plot_model(model, to_file = 'figures/lstm_diagram.png', 
                show_shapes = True, show_layer_names = True)
     return model
 
 def train_lstm_model(model, model_name, x_train, y_train, x_val, y_val):    
-    chk = ModelCheckpoint((model_name + '.pkl'), 
+    chk = ModelCheckpoint('models/' + model_name + '.pkl', 
                           monitor = 'val_accuracy', 
                           save_best_only = True, 
                           mode = 'max', 
@@ -332,7 +289,7 @@ def create_custom_cnn_model():
     model.add(Dropout(0.5))
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
-    plot_model(model, to_file = 'cnn_custom_diagram.png', 
+    plot_model(model, to_file = 'figures/cnn_custom_diagram.png', 
                show_shapes = True, show_layer_names = True)
     return model
 
@@ -347,12 +304,12 @@ def create_wavenet_cnn_model():
     model.add(GlobalAveragePooling1D())
     model.add(Dense(1, activation = 'sigmoid'))
     print(model.summary())
-    plot_model(model, to_file = 'cnn_wavenet_diagram.png', 
+    plot_model(model, to_file = 'figures/cnn_wavenet_diagram.png', 
                show_shapes = True, show_layer_names = True)
     return model
 
 def train_cnn_model(model, model_name, x_train, y_train, x_val, y_val):
-    chk = ModelCheckpoint((model_name + '.pkl'), 
+    chk = ModelCheckpoint('models/' + model_name + '.pkl', 
                           monitor = 'val_accuracy', 
                           save_best_only = True,
                           mode = 'max',
@@ -423,7 +380,7 @@ def build_gridsearch(build_function, x_train, y_train, model_name):
     print('Best Parameters: ')
     model = validator.best_estimator_.model
     print(validator.best_params_)
-    model.save(model_name + '.pkl')
+    model.save('models/' + model_name + '.pkl')
     
     return model
 
@@ -432,12 +389,12 @@ def build_gridsearch(build_function, x_train, y_train, model_name):
 # TEST MODEL
 # ------------------
 def model_acc(model_name):
-    pickle_name = model_name + '.pkl'
+    pickle_name = 'models/' + model_name + '.pkl'
     model = load_model(pickle_name)
     y_preds = model.predict_classes(x_test)
     acc = accuracy_score(y_test, y_preds)
     cm = confusion_matrix(y_test, y_preds)
-    scores = precision_recall_fscore_support(y_test, y_preds, average='macro')
+    scores = precision_recall_fscore_support(y_test, y_preds, average = 'macro')
     return acc, cm, scores
 
 def plot_batch_losses(history, plot_name):
@@ -456,7 +413,7 @@ def plot_batch_losses(history, plot_name):
     line1, = ax.plot(x1, y1, label = 'loss')
     ax.set_xlabel('Batch')
     ax.set_ylabel('Loss')
-    plt.savefig(plot_name + '.png')
+    plt.savefig('figures/' + plot_name + '.png')
     plt.show()
 
 
@@ -468,28 +425,26 @@ if __name__=="__main__":
     # --------------------
     # DATA WRANGLING
     # --------------------
+    # interictal
     data = get_data(PATH_INTERICTAL)
     timestamps = create_timestamps(data)
-
-    # filter and downsample data
     data_filtered = iEEG_data_filter(data, FS, 0.16, 200, 60)
     fs_downSample = FS / DOWN_SAMPLE_FACTOR
     data_filtered_tmp = signal.decimate(data_filtered, DOWN_SAMPLE_FACTOR, axis = 0)
     data_filtered = pd.DataFrame(data_filtered_tmp, columns = data_filtered.columns); del data_filtered_tmp
     data_interictal = data_filtered
     
+    # ictal
     data = get_data(PATH_ICTAL)
     timestamps = create_timestamps(data)
-
-    # filter and downsample data
     data_filtered = iEEG_data_filter(data, FS, 0.16, 200, 60)
     fs_downSample = FS / DOWN_SAMPLE_FACTOR
     data_filtered_tmp = signal.decimate(data_filtered, DOWN_SAMPLE_FACTOR, axis = 0)
     data_filtered = pd.DataFrame(data_filtered_tmp, columns = data_filtered.columns); del data_filtered_tmp
     data_ictal = data_filtered
     
+    # concatenate
     data = pd.concat([data_interictal, data_ictal], ignore_index = True)
-    
     dataset, dataset_targets = create_merge_dataset(data, data_interictal.shape[0],
                                               START_TIME_INTERICTAL, END_TIME_INTERICTAL,
                                               START_TIME_ICTAL, END_TIME_ICTAL)
@@ -561,6 +516,8 @@ if __name__=="__main__":
     print("CNN WaveNet Test Set Confusion Matrix: ")
     print(cnn_cm)
     
+    
+    """
     # train LSTM
     lstm_model = create_lstm_model()
     lstm_model_name = 'eeg-model-lstm'
@@ -589,6 +546,7 @@ if __name__=="__main__":
     print("%.4f" % round(cnn_acc, 4))  
     print("CNN Test Set Confusion Matrix: ")
     print(cnn_cm)
+    """
     
     # --------------------
     # OPTION 2: GridSearch
