@@ -6,15 +6,16 @@ Created on Fri Aug 14 15:06:41 2020
 @author: jaisi8631
 """
 
+# ------------------
+# NOTES
+# ------------------
+# <id> denotes replacable ID of dataset, for example: hup172 or hup138
+# Interictal data must be stored as: ../datasets/<id>-interictal.pickle
+# Ictal data must be stored as: ../datasets/<id>-ictal.pickle
+# Model must be stored as: models/<model_name>.pkl
+# Labels csv file must be stored as: labels/<id>-labels.csv
 
-"""
-RUNNING THIS FILE FOR DATASET WITH IDENTIFICATION NUMBER 'ID':
-1. Download datasets via get_iEEG_data.py, and name them: 
-   hupID-interictal.pickle and hupID-ictal.pickle
-2. Create csv file with labels, and name it: hupID-labels.csv
-3. 
 
-"""
 # ------------------
 # REGULAR IMPORTS
 # ------------------
@@ -24,6 +25,7 @@ import numpy as np
 import math
 from scipy import signal
 import matplotlib.pyplot as plt
+import argparse
 
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support
@@ -43,44 +45,41 @@ from keras.callbacks import ModelCheckpoint
 from keras.callbacks import EarlyStopping
 from keras.wrappers.scikit_learn import KerasClassifier
 
-
 # ------------------
-# LSTM IMPORTS
+# ARGUMENT PARSER
 # ------------------
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
-
-
-# ------------------
-# CNN IMPORTS
-# ------------------
-from keras.optimizers import SGD
-from keras.layers import Reshape
-from keras.layers import Conv1D
-from keras.layers import InputLayer
-from keras.layers import Dropout
-from keras.layers import Flatten
-from keras.layers import MaxPooling1D
-from keras.layers import GlobalAveragePooling1D
+ap = argparse.ArgumentParser()
+ap.add_argument("-a", "--start_interictal", type = int, default = 356850680000,
+            help = "Start time for interictal data.")
+ap.add_argument("-b", "--end_interictal", type = int, default = 356903099171,
+            help = "End time for interictal data.")
+ap.add_argument("-c", "--start_ictal", type = int, default = 402704260829,
+            help = "Start time for ictal data.")
+ap.add_argument("-d", "--end_ictal", type = int, default = 402756680000,
+            help = "End time for ictal data.")
+ap.add_argument("-i", "--dataset_id", type = str, default = 'hup172',
+            help = "Dataset name.")
+ap.add_argument("-m", "--model_name", type = str, default = 'eeg-model-cnn-wavenet',
+            help = "Model name.")
+args = vars(ap.parse_args())
 
 
 # ------------------
 # CONSTANTS
 # ------------------
-START_TIME_INTERICTAL = 356850680000
-END_TIME_INTERICTAL = 356903099171
-START_TIME_ICTAL = 402704260829
-END_TIME_ICTAL = 402756680000
+START_TIME_INTERICTAL = args['start_interictal']
+END_TIME_INTERICTAL = args['end_interictal']
+START_TIME_ICTAL = args['start_ictal']
+END_TIME_ICTAL = args['end_ictal']
 FS = 1024
 DOWN_SAMPLE_FACTOR = 10
 STEP_SIZE = 256
 SEQUENCE_LEN = 1024
 
-PATH_INTERICTAL = "../datasets/hup172-interictal.pickle"
-PATH_ICTAL = "../datasets/hup172-ictal.pickle"
-PATH_LABELS = "labels/hup172-labels.csv"
-PATH_MODEL = 'models/eeg-model-cnn-wavenet'
+PATH_INTERICTAL = "../datasets/" + args['dataset_id'] + "-interictal.pickle"
+PATH_ICTAL = "../datasets/" + args['dataset_id'] + "-ictal.pickle"
+PATH_LABELS = "labels/" + args['dataset_id'] + "-labels.csv"
+PATH_MODEL = "models/" + args['model_name'] + ".pkl"
 
 
 # ------------------
@@ -177,7 +176,6 @@ def create_merge_dataset(data, split_point, start_time_interictal,
     
             sequence_end_time = start_time_ictal + (index * FS * DOWN_SAMPLE_FACTOR)
             
-            # print(sequence_end_time, col_start_time)
             if(sequence_end_time >= col_start_time and 
                sequence_end_time <= col_end_time):
                 dataset_targets.append(1)
@@ -237,7 +235,7 @@ def create_dataset(data, start_time, end_time):
 # TEST MODEL
 # ------------------
 def model_acc(model_name, test, targets):
-    pickle_name = model_name + '.pkl'
+    pickle_name = model_name
     model = load_model(pickle_name)
     preds = model.predict_classes(test)
     acc = accuracy_score(targets, preds)
@@ -293,8 +291,8 @@ if __name__=="__main__":
     # TESTING MODEL
     # --------------------
     cnn_acc, cnn_cm, cnn_scores = model_acc(PATH_MODEL, dataset, dataset_targets)
-    print("CNN WaveNet Test Set Accuracy: ")
+    print("Test Set Accuracy: ")
     print("%.4f" % round(cnn_acc, 4))   
-    print("CNN WaveNet Test Set Confusion Matrix: ")
+    print("Test Set Confusion Matrix: ")
     print(cnn_cm)
     
